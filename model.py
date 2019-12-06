@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Concatenate, Dense, LSTM
+from typing import Union
 
 
 class DNC(tf.keras.Model):
@@ -45,8 +46,8 @@ class DNC(tf.keras.Model):
         self.controller_dim = self.output_dim + self.interface_dim  # Y+I
 
         # initialize controller output and interface vector with gaussian normal
-        self.output_v = tf.truncated_normal([1, self.output_dim], stddev=0.1)  # [1,Y]
-        self.interface = tf.truncated_normal([1, self.interface_dim], stddev=0.1)  # [1,I]
+        self.output_v = tf.random.truncated_normal([1, self.output_dim], stddev=0.1)  # [1,Y]
+        self.interface = tf.random.truncated_normal([1, self.interface_dim], stddev=0.1)  # [1,I]
 
         # initialize memory matrix with zeros
         self.M = tf.zeros(memory_shape)  # [N,W]
@@ -67,8 +68,8 @@ class DNC(tf.keras.Model):
 
         # controller variables
         # initialize controller hidden state
-        self.h = tf.Variable(tf.truncated_normal([1, self.controller_dim], stddev=0.1), name='dnc_h')  # [1,Y+I]
-        self.c = tf.Variable(tf.truncated_normal([1, self.controller_dim], stddev=0.1), name='dnc_c')  # [1,Y+I]
+        self.h = tf.Variable(tf.random.truncated_normal([1, self.controller_dim], stddev=0.1), name='dnc_h')  # [1,Y+I]
+        self.c = tf.Variable(tf.random.truncated_normal([1, self.controller_dim], stddev=0.1), name='dnc_c')  # [1,Y+I]
 
         # initialise Dense and LSTM layers of the controller
         self.dense = Dense(self.W, activation=None)
@@ -81,17 +82,17 @@ class DNC(tf.keras.Model):
 
         # define and initialize weights for controller output and interface vectors
         self.W_output = tf.Variable(  # [Y+I,Y]
-            tf.truncated_normal([self.controller_dim, self.output_dim], stddev=0.1),
+            tf.random.truncated_normal([self.controller_dim, self.output_dim], stddev=0.1),
             name='dnc_net_output_weights'
         )
         self.W_interface = tf.Variable(  # [Y+I,I]
-            tf.truncated_normal([self.controller_dim, self.interface_dim], stddev=0.1),
+            tf.random.truncated_normal([self.controller_dim, self.interface_dim], stddev=0.1),
             name='dnc_interface_weights'
         )
 
         # output y = v + W_read_out[r(1), ..., r(R)]
         self.W_read_out = tf.Variable(  # [R*W,Y]
-            tf.truncated_normal([self.R * self.W, self.output_dim], stddev=0.1),
+            tf.random.truncated_normal([self.R * self.W, self.output_dim], stddev=0.1),
             name='dnc_read_vector_weights'
         )
 
@@ -137,7 +138,7 @@ class DNC(tf.keras.Model):
         # sort usage vector in ascending order and keep original indices of sorted usage vector
         sorted_usage, free_list = tf.nn.top_k(-1 * tf.transpose(self.usage), k=self.N)
         sorted_usage *= -1
-        cumprod = tf.cumprod(sorted_usage, axis=1, exclusive=True)
+        cumprod = tf.math.cumprod(sorted_usage, axis=1, exclusive=True)
         unorder = (1 - sorted_usage) * cumprod
 
         W_alloc = tf.zeros([self.N])
@@ -158,7 +159,7 @@ class DNC(tf.keras.Model):
         x = self.dense(x)  # [1,W]
 
         # concatenate input with read vectors
-        x_in = tf.expand_dims(Concatenate()([x, self.read_v], axis=0), axis=0)  # [1,R+1,W]
+        x_in = tf.expand_dims(Concatenate(axis=0)([x, self.read_v]), axis=0)  # [1,R+1,W]
 
         # LSTM controller
         initial_state = [self.h, self.c]
@@ -263,7 +264,7 @@ class DNC(tf.keras.Model):
         # create read vectors by applying read weights to memory matrix
         self.read_v = tf.transpose(tf.matmul(self.M, self.W_read, transpose_a=True))  # ([W,N]*[N,R])^T -> [R,W]
 
-    def call(self, x: tf.Tensor) -> tf.Tensor:
+    def step(self, x: tf.Tensor) -> tf.Tensor:
         # update controller
         self.controller(x)
 
@@ -289,5 +290,10 @@ class DNC(tf.keras.Model):
         y = self.output_v + read_v_out
         return y
 
-    def fit(self):
-        pass
+    def call(self, x: Union[np.ndarray, tf.Tensor]) -> tf.Tensor:
+        y = []
+        for x_seq in tf.unstack(x, axis=0):
+            x_seq = tf.expand_dims(x_seq, axis=0)
+            y_seq = self.step(x_seq)
+            y.append(y_seq)
+        return tf.squeeze(tf.stack(y, axis=0))
