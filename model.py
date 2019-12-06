@@ -154,6 +154,7 @@ class DNC(tf.keras.Model):
         return tf.reshape(W_alloc, [self.N, 1])
 
     def controller(self, x: tf.Tensor) -> None:
+        """ Update the hidden state of the LSTM controller. """
         # flatten input and pass through dense layer to avoid shape mismatch
         x = tf.reshape(x, [1, -1])
         x = self.dense(x)  # [1,W]
@@ -166,6 +167,10 @@ class DNC(tf.keras.Model):
         _, self.h, self.c = self.lstm(x_in, initial_state=initial_state)
 
     def partition_interface(self):
+        """
+        Partition the interface vector in the read and write keys and strengths,
+        the free, allocation and write gates, read modes and erase and write vectors.
+        """
         # convert interface vector into a set of read write vectors
         partition = tf.constant([[0] * (self.R * self.W) + [1] * self.R +
                                  [2] * self.W + [3] + [4] * self.W + [5] * self.W +
@@ -210,6 +215,7 @@ class DNC(tf.keras.Model):
               erase: tf.Tensor,
               write_v: tf.Tensor
               ):
+        """ Write to the memory matrix. """
         # memory retention vector represents by how much each location will not be freed by the free gates
         retention = tf.reduce_prod(1 - free_gates * self.W_read, axis=1)
         retention = tf.reshape(retention, [self.N, 1])  # [N,1]
@@ -235,6 +241,7 @@ class DNC(tf.keras.Model):
              b_read: tf.Tensor,
              read_modes: tf.Tensor
              ):
+        """ Read from the memory matrix. """
         # update memory link matrix used later for the forward and backward read modes
         W_write_cast = tf.matmul(self.W_write, tf.ones([1, self.N]))  # [N,N]
         self.L = ((1 - W_write_cast - tf.transpose(W_write_cast)) * self.L +
@@ -265,6 +272,10 @@ class DNC(tf.keras.Model):
         self.read_v = tf.transpose(tf.matmul(self.M, self.W_read, transpose_a=True))  # ([W,N]*[N,R])^T -> [R,W]
 
     def step(self, x: tf.Tensor) -> tf.Tensor:
+        """
+        Update the controller, compute the output and interface vectors,
+        write to and read from memory and compute the output.
+        """
         # update controller
         self.controller(x)
 
@@ -291,6 +302,7 @@ class DNC(tf.keras.Model):
         return y
 
     def call(self, x: Union[np.ndarray, tf.Tensor]) -> tf.Tensor:
+        """ Unstack the input, run through the DNC and return the stacked output. """
         y = []
         for x_seq in tf.unstack(x, axis=0):
             x_seq = tf.expand_dims(x_seq, axis=0)
