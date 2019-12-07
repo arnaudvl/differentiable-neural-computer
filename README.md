@@ -13,4 +13,4 @@ numpy
 tensorflow>=2
 ```
 
-The [example notebook](https://github.com/arnaudvl/differentiable-neural-computer/blob/master/example.ipynb) illustrates how to train the DNC, defined in [models.py](https://github.com/arnaudvl/differentiable-neural-computer/blob/master/model.py).
+The [example notebook](https://github.com/arnaudvl/differentiable-neural-computer/blob/master/example.ipynb) illustrates how to train the DNC, defined in [model.py](https://github.com/arnaudvl/differentiable-neural-computer/blob/master/model.py).
